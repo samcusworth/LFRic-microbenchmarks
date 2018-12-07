@@ -114,42 +114,33 @@ contains
     ! Internal parameters
     integer(kind=i_def) :: i, mu_i ! Row and column index
 
-    ! Arrays c' and d' used in Thomas algorithm
-    real(kind=r_def), dimension(nrow) :: c_prime, d_prime
-    ! inverse denominator
-    real(kind=r_def) :: inv_denom
+    ! Variables to store data for LAPACK routines
+    real(kind=r_def), dimension(nrow) :: work_vector, diagnonal
+    real(kind=r_def), dimension(nrow-1) :: upper, lower
+    integer(kind=i_def) :: info
     
     ! Spurious instructions to avoid 'unused variable' warnings
     i = alpha + beta + gamma_m + gamma_p
 
-    ! Step 1: Forward sweep, loop over all rows
+    ! load up data into LAPACK compatible arrays
     do i=1, nrow
-       mu_i = map(1) + indirection_dofmap(i) - 1
-       if (i == 1) then 
-          ! First row
-          inv_denom = 1.0_r_def/columnwise_matrix(2,i,cell)
-          c_prime(i) = inv_denom * columnwise_matrix(3,i,cell)
-          d_prime(i) = inv_denom * x(mu_i)
-       else 
-          ! Subsequent rows 2,...,nrow-1
-          inv_denom = 1.0_r_def / ( columnwise_matrix(2,i,cell) &
-                    - columnwise_matrix(1,i,cell) * c_prime(i-1) )
-          if (i < nrow) then
-             ! We don't need c' in the last row
-             c_prime(i) = inv_denom * columnwise_matrix(3,i,cell)
-          end if
-          d_prime(i) = inv_denom * ( x(mu_i) &
-                     - columnwise_matrix(1,i,cell) * d_prime(i-1) )
-       end if
+      mu_i = map(1) + indirection_dofmap(i) - 1
+      work_vector(i) = x(mu_i)
+      diagnonal(i) = columnwise_matrix(2,i,cell)
     end do
-    ! Step 2: Backward sweep (substitution), loop over all rows backwards
-    do i=nrow,1,-1
-       ! Overwrite d' with solution and then copy to correct position in vector
-       mu_i = map(1) + indirection_dofmap(i) - 1
-       if (i<nrow) then 
-          d_prime(i) = d_prime(i) - c_prime(i) * d_prime(i+1)
-       end if
-       lhs(mu_i) = d_prime(i)
+
+    do i=1, nrow-1
+      upper(i) = columnwise_matrix(1,i+1,cell)
+      lower(i) = columnwise_matrix(3,i,cell)
+    end do
+
+    ! Call LAPACK library
+    call dgtsv(nrow,1,upper,diagnonal,lower,work_vector,nrow,info)
+
+    ! Put the result into the LHS
+    do i=1, nrow
+      mu_i = map(1) + indirection_dofmap(i) - 1
+      lhs(mu_i) = work_vector(i)
     end do
 
   end subroutine columnwise_op_appinv_kernel_code

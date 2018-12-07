@@ -7,7 +7,7 @@
 FC=ifort
 FFLAGS=-g -qopenmp -traceback
 #FFLAGS=-g 
-LDFLAGS=-g -qopenmp -traceback
+LDFLAGS=-g -qopenmp -traceback -llapack
 #LDFLAGS=-g
 
 VPATH=../common:.
